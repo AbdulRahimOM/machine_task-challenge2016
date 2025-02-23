@@ -98,6 +98,8 @@ This project was developed as part of a machine task for a company interview pro
   - Region validation using CSV data
   - Distributor existence checks
   - Permission hierarchy validation
+- **Concurrency Handling**
+  - Prevention of race conditions during concurrent access using read and write locks (sync.RWMutex)
 
 ### Key Components
 1. **Route Handlers** (`internal/handler`)
@@ -105,11 +107,12 @@ This project was developed as part of a machine task for a company interview pro
    - Input validation and sanitization
    - Error handling and response formatting
 
-2. **Business Logic**
+2. **Business Logic & Data Management** (`internal/data`)
    - Distributor management logic
    - Permission validation and inheritance
    - Region validation against CSV data
-
+   - Thread-safe data operations using RWMutex
+   - Optimized read/write locking for better performance
 
 ## Technical Notes
 
