@@ -26,6 +26,7 @@ var (
 	ErrDistributorExists   = errors.New("distributor already exists")
 
 	successResponse = response.CreateSuccess(200, "SUCCESS", nil)
+	createdResponse = response.CreateSuccess(201, "CREATED", nil)
 )
 
 type (
@@ -250,7 +251,7 @@ func (db DataBank) AddSubDistributor(subDistributor, parentDistributor string) r
 			parentDistributor:      &parentDistributor,
 		}
 	}
-	return successResponse
+	return createdResponse
 }
 
 func (db *DataBank) AddDistributor(distributor string) response.Response {
@@ -261,7 +262,7 @@ func (db *DataBank) AddDistributor(distributor string) response.Response {
 		permissionDataGlobally: make(permissionDataGlobally),
 		parentDistributor:      nil,
 	}
-	return successResponse
+	return createdResponse
 }
 
 func (db DataBank) RemoveDistributor(distributor string) response.Response {
