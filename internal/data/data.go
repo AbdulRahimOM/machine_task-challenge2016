@@ -5,6 +5,7 @@ import (
 	"challenge16/internal/response"
 	"errors"
 	"strings"
+	"sync"
 )
 
 const (
@@ -30,7 +31,10 @@ var (
 )
 
 type (
-	DataBank map[string]distributorData
+	DataBank struct {
+		Distributors map[string]distributorData
+		mu           sync.RWMutex
+	}
 
 	distributorData struct {
 		permissionDataGlobally
@@ -53,15 +57,16 @@ type (
 )
 
 func NewDataBank() DataBank {
-	return make(DataBank)
+	return DataBank{
+		Distributors: make(map[string]distributorData),
+		mu:           sync.RWMutex{},
+	}
 }
 
 func (db *DataBank) MarkInclusion(distributor, regionString string) response.Response {
-	return markAsIncluded(*db, distributor, regionString)
-}
-
-func markAsIncluded(db DataBank, distributor, regionString string) response.Response {
-	if _, ok := db[distributor]; !ok {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+	if _, ok := db.Distributors[distributor]; !ok {
 		return response.CreateError(404, DISTRIBUTOR_NOT_FOUND, ErrDistributorNotFound)
 	}
 
@@ -71,41 +76,39 @@ func markAsIncluded(db DataBank, distributor, regionString string) response.Resp
 	}
 
 	if regionType == COUNTRY {
-		db[distributor].permissionDataGlobally[countryCode] = permissionDataInCountry{
+		db.Distributors[distributor].permissionDataGlobally[countryCode] = permissionDataInCountry{
 			PermissionType: allowAll,
 		}
 		return successResponse
 	}
-	if _, ok := db[distributor].permissionDataGlobally[countryCode]; !ok {
-		db[distributor].permissionDataGlobally[countryCode] = permissionDataInCountry{
+	if _, ok := db.Distributors[distributor].permissionDataGlobally[countryCode]; !ok {
+		db.Distributors[distributor].permissionDataGlobally[countryCode] = permissionDataInCountry{
 			PermissionType: custom,
 			Inclusions:     make(map[string]permissionDataInProvince),
 		}
 	}
 	if regionType == PROVINCE {
-		db[distributor].permissionDataGlobally[countryCode].Inclusions[provinceCode] = permissionDataInProvince{
+		db.Distributors[distributor].permissionDataGlobally[countryCode].Inclusions[provinceCode] = permissionDataInProvince{
 			PermissionType: allowAll,
 		}
 		return successResponse
 	}
 
-	if _, ok := db[distributor].permissionDataGlobally[countryCode].Inclusions[provinceCode]; !ok {
-		db[distributor].permissionDataGlobally[countryCode].Inclusions[provinceCode] = permissionDataInProvince{
+	if _, ok := db.Distributors[distributor].permissionDataGlobally[countryCode].Inclusions[provinceCode]; !ok {
+		db.Distributors[distributor].permissionDataGlobally[countryCode].Inclusions[provinceCode] = permissionDataInProvince{
 			PermissionType: custom,
 			Inclusions:     make(map[string]bool),
 		}
 	}
 
-	db[distributor].permissionDataGlobally[countryCode].Inclusions[provinceCode].Inclusions[cityCode] = true
+	db.Distributors[distributor].permissionDataGlobally[countryCode].Inclusions[provinceCode].Inclusions[cityCode] = true
 	return successResponse
 }
 
 func (db *DataBank) MarkExclusion(distributor, regionString string) response.Response {
-	return markAsExcluded(*db, distributor, regionString)
-}
-
-func markAsExcluded(db DataBank, distributor, regionString string) response.Response {
-	if _, ok := db[distributor]; !ok {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+	if _, ok := db.Distributors[distributor]; !ok {
 		return response.CreateError(404, DISTRIBUTOR_NOT_FOUND, ErrDistributorNotFound)
 	}
 
@@ -115,37 +118,37 @@ func markAsExcluded(db DataBank, distributor, regionString string) response.Resp
 	}
 
 	if regionType == COUNTRY {
-		db[distributor].permissionDataGlobally[countryCode] = permissionDataInCountry{
+		db.Distributors[distributor].permissionDataGlobally[countryCode] = permissionDataInCountry{
 			PermissionType: denyAll,
 		}
 		return successResponse
 	}
-	if _, ok := db[distributor].permissionDataGlobally[countryCode]; !ok {
-		db[distributor].permissionDataGlobally[countryCode] = permissionDataInCountry{
+	if _, ok := db.Distributors[distributor].permissionDataGlobally[countryCode]; !ok {
+		db.Distributors[distributor].permissionDataGlobally[countryCode] = permissionDataInCountry{
 			PermissionType: custom,
 			Inclusions:     make(map[string]permissionDataInProvince),
 		}
 	}
 	if regionType == PROVINCE {
-		db[distributor].permissionDataGlobally[countryCode].Inclusions[provinceCode] = permissionDataInProvince{
+		db.Distributors[distributor].permissionDataGlobally[countryCode].Inclusions[provinceCode] = permissionDataInProvince{
 			PermissionType: denyAll,
 		}
 		return successResponse
 	}
 
-	if _, ok := db[distributor].permissionDataGlobally[countryCode].Inclusions[provinceCode]; !ok {
-		db[distributor].permissionDataGlobally[countryCode].Inclusions[provinceCode] = permissionDataInProvince{
+	if _, ok := db.Distributors[distributor].permissionDataGlobally[countryCode].Inclusions[provinceCode]; !ok {
+		db.Distributors[distributor].permissionDataGlobally[countryCode].Inclusions[provinceCode] = permissionDataInProvince{
 			PermissionType: custom,
 			Inclusions:     make(map[string]bool),
 		}
 	}
 
-	db[distributor].permissionDataGlobally[countryCode].Inclusions[provinceCode].Inclusions[cityCode] = false
+	db.Distributors[distributor].permissionDataGlobally[countryCode].Inclusions[provinceCode].Inclusions[cityCode] = false
 
 	return successResponse
 }
 
-func (db DataBank) getRegionDetails(regionString string) (countryCode, provinceCode, cityCode, regionType string, err error) {
+func (db *DataBank) getRegionDetails(regionString string) (countryCode, provinceCode, cityCode, regionType string, err error) {
 	subStrings := strings.Split(regionString, "-") // Splitting the regionString by "-", this is the regionString I am assuming
 	switch len(subStrings) {
 	case 1:
@@ -176,7 +179,7 @@ func (db DataBank) getRegionDetails(regionString string) (countryCode, provinceC
 	return
 }
 
-func (db DataBank) IsAllowed(distributor, regionString string) response.Response {
+func (db *DataBank) IsAllowed(distributor, regionString string) response.Response {
 	countryCode, provinceCode, cityCode, regionType, err := db.getRegionDetails(regionString)
 	if err != nil {
 		return response.CreateError(404, REGION_NOT_FOUND, err)
@@ -197,8 +200,10 @@ func (db DataBank) IsAllowed(distributor, regionString string) response.Response
 	}
 }
 
-func (db DataBank) isAllowedForTheDistributor(distributor, countryCode, provinceCode, cityCode, regionType string) (bool, error) {
-	permissionData, ok := db[distributor]
+func (db *DataBank) isAllowedForTheDistributor(distributor, countryCode, provinceCode, cityCode, regionType string) (bool, error) {
+	db.mu.RLock()
+	defer db.mu.RUnlock()
+	permissionData, ok := db.Distributors[distributor]
 	if !ok {
 		return false, ErrDistributorNotFound
 	}
@@ -241,12 +246,14 @@ func (db DataBank) isAllowedForTheDistributor(distributor, countryCode, province
 	return false, nil
 }
 
-func (db DataBank) AddSubDistributor(subDistributor, parentDistributor string) response.Response {
-	if _, ok := db[parentDistributor]; !ok {
+func (db *DataBank) AddSubDistributor(subDistributor, parentDistributor string) response.Response {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+	if _, ok := db.Distributors[parentDistributor]; !ok {
 		return response.CreateError(404, DISTRIBUTOR_NOT_FOUND, ErrDistributorNotFound)
 	}
-	if _, ok := db[subDistributor]; !ok {
-		db[subDistributor] = distributorData{
+	if _, ok := db.Distributors[subDistributor]; !ok {
+		db.Distributors[subDistributor] = distributorData{
 			permissionDataGlobally: make(permissionDataGlobally),
 			parentDistributor:      &parentDistributor,
 		}
@@ -255,20 +262,24 @@ func (db DataBank) AddSubDistributor(subDistributor, parentDistributor string) r
 }
 
 func (db *DataBank) AddDistributor(distributor string) response.Response {
-	if _, ok := (*db)[distributor]; ok {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+	if _, ok := db.Distributors[distributor]; ok {
 		return response.CreateError(400, "DISTRIBUTOR_EXISTS", ErrDistributorExists)
 	}
-	(*db)[distributor] = distributorData{
+	db.Distributors[distributor] = distributorData{
 		permissionDataGlobally: make(permissionDataGlobally),
 		parentDistributor:      nil,
 	}
 	return createdResponse
 }
 
-func (db DataBank) RemoveDistributor(distributor string) response.Response {
-	if _, ok := db[distributor]; !ok {
+func (db *DataBank) RemoveDistributor(distributor string) response.Response {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+	if _, ok := db.Distributors[distributor]; !ok {
 		return response.CreateError(404, DISTRIBUTOR_NOT_FOUND, ErrDistributorNotFound)
 	}
-	delete(db, distributor)
+	delete(db.Distributors, distributor)
 	return successResponse
 }
