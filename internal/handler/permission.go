@@ -9,13 +9,13 @@ import (
 	"github.com/gofiber/fiber/v2"
 )
 
-type SS struct {
+type checkPermissionRequest struct {
 	Distributor  string `query:"distributor" validate:"required"`
 	RegionString string `query:"region" validate:"required"`
 }
 
 func (h *handler) CheckIfDistributionIsAllowed(c *fiber.Ctx) error {
-	req := new(SS)
+	req := new(checkPermissionRequest)
 
 	if ok, err := validation.BindAndValidateURLQueryRequest(c, req); !ok {
 		return err
