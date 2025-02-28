@@ -30,6 +30,13 @@ func main() {
 			permission.Post("/contract", handler.ApplyContract)
 			permission.Post("/disallow", handler.DisallowDistribution)
 		}
+
+		regions := app.Group("/regions")
+		{
+			regions.Get("/countries", handler.GetCountries)
+			regions.Get("/provinces/:countryCode", handler.GetProvincesInCountry)
+			regions.Get("/cities/:countryCode/:provinceCode", handler.GetCitiesInProvince)
+		}
 	}
 
 	err := app.Listen(fmt.Sprintf(":4010"))
