@@ -21,13 +21,13 @@ func main() {
 		{
 			distributor.Post("/", handler.AddDistributor)
 			distributor.Delete("/:distributor", handler.RemoveDistributor)
-			distributor.Post("/add-sub", handler.AddSubDistributor)
 		}
 
 		permission := app.Group("/permission")
 		{
 			permission.Get("/check", handler.CheckIfDistributionIsAllowed)
 			permission.Post("/allow", handler.AllowDistribution)
+			permission.Post("/contract", handler.ApplyContract)
 			permission.Post("/disallow", handler.DisallowDistribution)
 		}
 	}

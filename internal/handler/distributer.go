@@ -21,24 +21,6 @@ func (h *handler) AddDistributor(c *fiber.Ctx) error {
 	return resp.WriteToJSON(c)
 }
 
-func (h *handler) AddSubDistributor(c *fiber.Ctx) error {
-	req := new(struct {
-		SubDistributor    string `json:"sub_distributor" validate:"required"`
-		ParentDistributor string `json:"parent_distributor" validate:"required"`
-	})
-
-	if ok, err := validation.BindAndValidateJSONRequest(c, req); !ok {
-		return err
-	}
-
-	resp := h.databank.AddSubDistributor(req.SubDistributor, req.ParentDistributor)
-	return resp.WriteToJSON(c)
-}
-
-type Ss struct {
-	Distributor string `param:"distributor" validate:"required"`
-}
-
 func (h *handler) RemoveDistributor(c *fiber.Ctx) error {
 	distributor := c.Params("distributor")
 	if distributor == "" {
