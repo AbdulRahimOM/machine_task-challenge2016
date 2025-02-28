@@ -21,6 +21,7 @@ func main() {
 		{
 			distributor.Post("/", handler.AddDistributor)
 			distributor.Delete("/:distributor", handler.RemoveDistributor)
+			distributor.Get("/", handler.GetDistributers)
 		}
 
 		permission := app.Group("/permission")
