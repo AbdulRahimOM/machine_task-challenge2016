@@ -292,3 +292,15 @@ func (db *DataBank) isAllowedForTheDistributor(distributor, countryCode, provinc
 	}
 	return false
 }
+
+func (db *DataBank) GetDistributors() response.Response {
+	db.mu.RLock()
+	defer db.mu.RUnlock()
+	distributors := make([]string, 0, len(db.Distributors))
+	for distributor := range db.Distributors {
+		distributors = append(distributors, distributor)
+	}
+	return response.CreateSuccess(200, "SUCCESS", map[string]interface{}{
+		"distributors": distributors,
+	})
+}
