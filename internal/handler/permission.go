@@ -21,8 +21,8 @@ func (h *handler) CheckIfDistributionIsAllowed(c *fiber.Ctx) error {
 		return err
 	}
 
-	// return resp.WriteToJSON(c)
-	return nil
+	resp := h.databank.CheckIfDistributionIsAllowed(req.Distributor, req.RegionString)
+	return resp.WriteToJSON(c)
 }
 
 func (h *handler) AllowDistribution(c *fiber.Ctx) error {
