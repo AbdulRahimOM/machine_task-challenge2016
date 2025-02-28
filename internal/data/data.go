@@ -304,3 +304,15 @@ func (db *DataBank) GetDistributors() response.Response {
 		"distributors": distributors,
 	})
 }
+
+func (db *DataBank) CheckIfDistributionIsAllowed(distributor, regionString string) response.Response {
+	countryCode, provinceCode, cityCode, regionType, err := regions.GetRegionDetails(regionString)
+	if err != nil {
+		return response.CreateError(404, REGION_NOT_FOUND, err)
+	}
+
+	if db.isAllowedForTheDistributor(distributor, countryCode, provinceCode, cityCode, regionType) {
+		return response.CreateSuccess(200, "DISTRIBUTION_ALLOWED", nil)
+	}
+	return response.CreateError(200, "DISTRIBUTION_NOT_ALLOWED", fmt.Errorf("distribution not allowed for the distributor in region %s", regionString))
+}
