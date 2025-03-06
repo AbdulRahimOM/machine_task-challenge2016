@@ -29,7 +29,7 @@ This project was developed as part of a machine task for a company interview pro
 - **Request Body**:
 ```json
 {
-    "distributor":"distributer_name"
+    "distributor":"distributor_name"
 }
   ```
 - **Success Response**: 201 Created
@@ -46,8 +46,8 @@ This project was developed as part of a machine task for a company interview pro
 - **Request Body**:
   ```json
 {
-    "parent_distributor":"distributer_name",
-    "sub_distributor":"new_sub_distributer_name""
+    "parent_distributor":"distributor_name",
+    "sub_distributor":"new_sub_distributor_name""
 }
   ```
 - **Success Response**: 201 Created
@@ -117,7 +117,7 @@ This project was developed as part of a machine task for a company interview pro
 ## Technical Notes
 
 - The system performs validation against a predefined list of cities/regions from cities.csv
-- Distributor authentication is simplified (no session management) with distributer name passed in request body
+- Distributor authentication is simplified (no session management) with distributor name passed in request body
 - All operations include validation for distributor existence and permission checks
 - The system maintains hierarchical relationships between distributors and sub-distributors
 

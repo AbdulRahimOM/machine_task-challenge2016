@@ -1,16 +1,11 @@
 package regions
 
-import (
-	"challenge16/internal/response"
-	"fmt"
-)
-
 type regionInfo struct {
 	Name string `json:"name"`
 	Code string `json:"code"`
 }
 
-func GetCountries() response.Response {
+func GetCountries() []regionInfo {
 	countries := make([]regionInfo, 0, len(Countries))
 	for code, country := range Countries {
 		countries = append(countries, regionInfo{
@@ -18,18 +13,17 @@ func GetCountries() response.Response {
 			Code: code,
 		})
 	}
-	return response.CreateSuccess(200, "SUCCESS", map[string]interface{}{
-		"countries": countries,
-	})
+	return countries
 }
 
-func GetProvincesInCountry(countryCode string) response.Response {
-	exists := checkCountry(countryCode)
-	if !exists {
-		return response.CreateError(404, "COUNTRY_NOT_FOUND", fmt.Errorf("Country not found: %s", countryCode))
+func GetProvincesInCountry(countryCode string) []regionInfo {
+	if !CheckCountry(countryCode) {
+		return nil
 	}
-
 	country := Countries[countryCode]
+	if country.Provinces == nil {
+		return nil
+	}
 	provinces := make([]regionInfo, 0, len(country.Provinces))
 	for code, province := range country.Provinces {
 		provinces = append(provinces, regionInfo{
@@ -37,17 +31,13 @@ func GetProvincesInCountry(countryCode string) response.Response {
 			Code: code,
 		})
 	}
-	return response.CreateSuccess(200, "SUCCESS", map[string]interface{}{
-		"provinces": provinces,
-	})
+	return provinces
 }
 
-func GetCitiesInProvince(countryCode, provinceCode string) response.Response {
-	exists := checkProvince(countryCode, provinceCode)
-	if !exists {
-		return response.CreateError(404, "PROVINCE_NOT_FOUND", fmt.Errorf("Province not found: %s-%s", countryCode, provinceCode))
+func GetCitiesInProvince(countryCode, provinceCode string) []regionInfo {
+	if !CheckProvince(countryCode, provinceCode) {
+		return nil
 	}
-
 	province := Countries[countryCode].Provinces[provinceCode]
 	cities := make([]regionInfo, 0, len(province.Cities))
 	for code, name := range province.Cities {
@@ -56,7 +46,5 @@ func GetCitiesInProvince(countryCode, provinceCode string) response.Response {
 			Code: code,
 		})
 	}
-	return response.CreateSuccess(200, "SUCCESS", map[string]interface{}{
-		"cities": cities,
-	})
+	return cities
 }

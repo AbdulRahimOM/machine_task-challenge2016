@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"challenge16/internal/dto"
 	"challenge16/internal/response"
 	"challenge16/validation"
 	"errors"
@@ -21,8 +22,8 @@ func (h *handler) CheckIfDistributionIsAllowed(c *fiber.Ctx) error {
 		return err
 	}
 
-	// return resp.WriteToJSON(c)
-	return nil
+	resp := h.databank.CheckIfDistributionIsAllowed(req.Distributor, req.RegionString)
+	return resp.WriteToJSON(c)
 }
 
 func (h *handler) AllowDistribution(c *fiber.Ctx) error {
@@ -54,8 +55,8 @@ func (h *handler) DisallowDistribution(c *fiber.Ctx) error {
 }
 
 func (h *handler) ApplyContract(c *fiber.Ctx) error {
-	contract := string(c.Body())
-	distributorHeirarchy, includeRegions, excludeRegions, err := getContractData(contract)
+	contractText := string(c.Body())
+	contract, err := getContractData(contractText)
 	if err != nil {
 		return response.Response{
 			HttpStatusCode: 400,
@@ -63,11 +64,11 @@ func (h *handler) ApplyContract(c *fiber.Ctx) error {
 			Error:          err,
 		}.WriteToJSON(c)
 	}
-	resp := h.databank.ApplyContract(distributorHeirarchy, includeRegions, excludeRegions)
+	resp := h.databank.ApplyContract(*contract)
 	return resp.WriteToJSON(c)
 }
 
-func getContractData(contract string) (distributorHeirarchy, includeRegions, excludeRegions []string, err error) {
+func getContractData(contractText string) (*dto.Contract, error) {
 	//Example contract:
 	/*
 		Permissions for DISTRIBUTOR1
@@ -83,30 +84,56 @@ func getContractData(contract string) (distributorHeirarchy, includeRegions, exc
 		Permissions for DISTRIBUTOR1 < DISTRIBUTOR2 < DISTRIBUTOR3
 		INCLUDE: YADGR-KA-IN
 	*/
-
-	contractData := strings.Split(contract, "\n")
+	var (
+		contract = dto.Contract{
+			Permissions: dto.Permissions{
+				IncludedCountries: make(map[string]bool),
+				IncludedProvinces: make(map[string]map[string]bool),
+				IncludedCities:    make(map[string]map[string]map[string]bool),
+				ExcludedProvinces: make(map[string]map[string]bool),
+				ExcludedCities:    make(map[string]map[string]map[string]bool),
+			},
+		}
+		err error
+	)
+	contractData := strings.Split(contractText, "\n")
 
 	if len(contractData) < 2 {
 		err = errors.New("Invalid contract, regions not found")
-		return
+		return nil, err
 	}
 	heading := strings.TrimLeft(contractData[0], " ")
 	if !strings.HasPrefix(heading, "Permissions for ") {
 		err = errors.New("Invalid contract, heading line: Prefix: 'Permissions for ' not found")
-		return
-	} else {
-		data := strings.TrimPrefix(heading, "Permissions for ")
-		data = strings.TrimRight(data, " ") //to avoid spaces at the end made by mistake
-		distributorHeirarchy = strings.Split(data, " < ")
-		if len(distributorHeirarchy) == 0 {
-			err = errors.New("Invalid contract, distributor(s) not found in heading line after 'Permissions for': " + data)
-			return
-		} else if len(distributorHeirarchy) == 1 {
-			if distributorHeirarchy[0] == "" {
-				err = errors.New("Invalid contract, distributor(s) not found in heading line after 'Permissions for': " + data)
-				return
-			}
+		return nil, err
+	}
+
+	distributorHeirarchyText := strings.TrimPrefix(heading, "Permissions for ")
+	distributorHeirarchyText = strings.ReplaceAll(distributorHeirarchyText, " ", "") //Remove spaces
+	distributorHeirarchy := strings.Split(distributorHeirarchyText, "<")
+	switch len(distributorHeirarchy) {
+	case 0:
+		return nil, errors.New("Invalid contract, distributor(s) not found in heading line after 'Permissions for': " + distributorHeirarchyText)
+	case 1:
+		if distributorHeirarchy[0] == "" {
+			return nil, errors.New("Invalid contract, distributor(s) not found in heading line after 'Permissions for': " + distributorHeirarchyText)
 		}
+		contract.ContractRecipient = distributorHeirarchy[0]
+	default:
+		contract.ParentDistributor = &distributorHeirarchy[1]
+		contract.ContractRecipient = distributorHeirarchy[0]
+	}
+
+	//check for duplication in distributor heirarchy, also check for empty strings
+	distributorMap := make(map[string]bool)
+	for _, distributor := range distributorHeirarchy {
+		if distributor == "" {
+			return nil, errors.New("Invalid contract, empty distributor found in heading line after 'Permissions for': " + distributorHeirarchyText)
+		}
+		if _, ok := distributorMap[distributor]; ok {
+			return nil, errors.New("Invalid contract, duplicate distributor found in heading line after 'Permissions for': " + distributorHeirarchyText)
+		}
+		distributorMap[distributor] = true
 	}
 
 	for _, data := range contractData[1:] {
@@ -114,24 +141,41 @@ func getContractData(contract string) (distributorHeirarchy, includeRegions, exc
 		switch {
 		case strings.HasPrefix(data, "INCLUDE: "):
 			data = strings.TrimPrefix(data, "INCLUDE: ")
-			includeRegions = append(includeRegions, data)
+			err = contract.AddIncludedRegion(data)
+			if err != nil {
+				return nil, err
+			}
+
 		case strings.HasPrefix(data, "EXCLUDE: "):
 			data = strings.TrimPrefix(data, "EXCLUDE: ")
-			excludeRegions = append(excludeRegions, data)
+			err = contract.AddExcludedRegion(data)
+			if err != nil {
+				return nil, err
+			}
 		default:
-			err = errors.New("Invalid contract, invalid line found: " + data)
+			return nil, errors.New("Invalid contract, invalid line found: " + data)
 		}
 	}
 
-	if len(distributorHeirarchy) == 0 {
-		err = errors.New("Invalid contract, distributor(s) not found")
-		return
+	if len(contract.IncludedCountries) == 0 && len(contract.IncludedProvinces) == 0 && len(contract.IncludedCities) == 0 {
+		err = errors.New("Invalid contract, no included regions found in contract")
+		return nil, err
 	}
 
-	if len(includeRegions) == 0 && len(excludeRegions) == 0 {
-		err = errors.New("Invalid contract, no permissions found")
-		return
+	return &contract, nil
+}
+
+func (h *handler) GetDistributorPermissions(c *fiber.Ctx) error {
+	distributor := c.Params("distributor")
+	if distributor == "" {
+		return response.InvalidURLParamResponse("distributor", errors.New("distributor not found in url")).WriteToJSON(c)
 	}
 
-	return
+	if c.Query("type", "text") == "json" {
+		resp := h.databank.GetDistributorPermissionAsJSON(distributor)
+		return resp.WriteToJSON(c)
+	} else {
+		note := h.databank.GetDistributorPermissionsAsText(distributor)
+		return c.Status(200).SendString(note)
+	}
 }

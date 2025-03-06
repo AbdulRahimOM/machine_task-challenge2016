@@ -21,7 +21,7 @@ func main() {
 		{
 			distributor.Post("/", handler.AddDistributor)
 			distributor.Delete("/:distributor", handler.RemoveDistributor)
-			distributor.Get("/", handler.GetDistributers)
+			distributor.Get("/", handler.GetDistributors)
 		}
 
 		permission := app.Group("/permission")
@@ -30,6 +30,7 @@ func main() {
 			permission.Post("/allow", handler.AllowDistribution)
 			permission.Post("/contract", handler.ApplyContract)
 			permission.Post("/disallow", handler.DisallowDistribution)
+			permission.Get("/:distributor", handler.GetDistributorPermissions)
 		}
 
 		regions := app.Group("/regions")
