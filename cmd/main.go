@@ -4,8 +4,10 @@ import (
 	"challenge16/internal/config"
 	"challenge16/internal/handler"
 	"fmt"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v2/middleware/limiter"
 	"github.com/gofiber/fiber/v2/middleware/logger"
 )
 
@@ -13,6 +15,10 @@ func main() {
 
 	app := fiber.New()
 	app.Use(logger.New())
+	app.Use(limiter.New(limiter.Config{
+		Max:        config.RateLimit,
+		Expiration: 1 * time.Minute,
+	}))
 
 	handler := handler.NewHandler()
 
