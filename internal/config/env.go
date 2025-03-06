@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strconv"
 
 	"github.com/joho/godotenv"
 )
@@ -13,7 +14,8 @@ const (
 )
 
 var (
-	Port string
+	Port      string
+	RateLimit int
 )
 
 func init() {
@@ -31,6 +33,15 @@ func loadEnv() {
 	Port = os.Getenv("PORT")
 	if Port == "" {
 		Port = defaultPort
+	}
+
+	RateLimit,err = strconv.Atoi(os.Getenv("RATE_LIMIT"))
+	if err != nil {
+		if os.Getenv("RATE_LIMIT") == "" {
+			RateLimit = 60
+		} else {
+			log.Fatal("Error loading RATE_LIMIT from .env file. err", err)
+		}
 	}
 
 }
