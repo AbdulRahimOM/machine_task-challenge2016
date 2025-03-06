@@ -104,6 +104,9 @@ func (db *DataBank) filterContractPermissionsBasedOnParentPermissions(contract d
 	//provincial level exclusion
 	for country := range parentPermission.excludedProvinces {
 		if contractPermissions.IncludedCountries[country] {
+			if _, exists := contractPermissions.ExcludedProvinces[country]; !exists {
+				contractPermissions.ExcludedProvinces[country] = make(map[string]bool)
+			}
 			mergeMapIntoMap(contractPermissions.ExcludedProvinces[country], parentPermission.excludedProvinces[country])
 			continue
 		}
