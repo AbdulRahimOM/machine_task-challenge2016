@@ -5,6 +5,7 @@ import (
 	"challenge16/internal/response"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 )
 
@@ -32,265 +33,399 @@ var (
 
 type (
 	DataBank struct {
-		Distributors map[string]permissionDataGlobal
+		Distributors map[string]permissionData
 		mu           sync.RWMutex
-	}
-
-	permissionDataGlobal map[string]permissionDataInCountry
-
-	permissionDataInCountry struct {
-		PermissionType string // "allow-all", "deny-all", "custom"
-		Inclusions     map[string]permissionDataInProvince
-		Exclusions     map[string]permissionDataInProvince
-	}
-
-	permissionDataInProvince struct {
-		PermissionType string // "allow-all", "deny-all", "custom"
-		Inclusions     map[string]bool
-		Exclusions     map[string]bool
 	}
 )
 
 func NewDataBank() DataBank {
 	return DataBank{
-		Distributors: make(map[string]permissionDataGlobal),
+		Distributors: make(map[string]permissionData),
 		mu:           sync.RWMutex{},
 	}
 }
 
-func (db *DataBank) MarkInclusion(distributor, regionString string) response.Response {
-	db.mu.RLock()
-	if _, ok := db.Distributors[distributor]; !ok {
-		return response.CreateError(404, DISTRIBUTOR_NOT_FOUND, ErrDistributorNotFound)
+func newPermissionData() permissionData {
+	return permissionData{
+		includedCountries: make(map[string]bool),
+		includedProvinces: make(map[string]map[string]bool),
+		excludedProvinces: make(map[string]map[string]bool),
+		includedCities:    make(map[string]map[string]map[string]bool),
+		excludedCities:    make(map[string]map[string]map[string]bool),
 	}
-	db.mu.RUnlock()
+}
 
-	countryCode, provinceCode, cityCode, regionType, err := regions.GetRegionDetails(regionString)
+func (db *DataBank) MarkInclusion(distributor, regionString string) response.Response {
+	if !db.distributorExists(distributor) {
+		return response.CreateError(404, DISTRIBUTOR_NOT_FOUND, fmt.Errorf("distributor %s not found", distributor))
+	}
+
+	region, err := regions.GetRegionDetails(regionString)
 	if err != nil {
 		return response.CreateError(404, REGION_NOT_FOUND, err)
 	}
 
-	db.markAsIncluded(distributor, countryCode, provinceCode, cityCode, regionType)
+	db.markAsIncluded(distributor, region)
 	return successResponse
 }
 
-func (db *DataBank) markAsIncluded(distributor, countryCode, provinceCode, cityCode, regionType string) {
+func (db *DataBank) markAsIncluded(distributor string, region regions.Region) {
+	db.createDistributorIfNotExists(distributor)
+
+	countryCode, provinceCode, cityCode := region.CountryCode, region.ProvinceCode, region.CityCode
+
 	db.mu.Lock()
 	defer db.mu.Unlock()
 
-	if _, ok := db.Distributors[distributor]; !ok {
-		db.Distributors[distributor] = make(permissionDataGlobal)
-	}
+	switch region.Type {
+	case COUNTRY:
+		db.Distributors[distributor].includedCountries[countryCode] = true
+		delete(db.Distributors[distributor].includedProvinces, countryCode)
+		delete(db.Distributors[distributor].excludedProvinces, countryCode)
+		delete(db.Distributors[distributor].includedCities, countryCode)
+		delete(db.Distributors[distributor].excludedCities, countryCode)
+	case PROVINCE:
+		if db.Distributors[distributor].includedCountries[countryCode] {
+			if _, exists := db.Distributors[distributor].excludedProvinces[countryCode]; exists {
+				if db.Distributors[distributor].excludedProvinces[countryCode][provinceCode] {
+					delete(db.Distributors[distributor].excludedProvinces[countryCode], provinceCode)
 
-	if regionType == COUNTRY {
-		db.Distributors[distributor][countryCode] = permissionDataInCountry{
-			PermissionType: allowAll,
-			Inclusions:     make(map[string]permissionDataInProvince),
-			Exclusions:     make(map[string]permissionDataInProvince),
-		}
-		return
-	}
-	if _, ok := db.Distributors[distributor][countryCode]; !ok {
-		db.Distributors[distributor][countryCode] = permissionDataInCountry{
-			PermissionType: custom,
-			Inclusions:     make(map[string]permissionDataInProvince),
-			Exclusions:     make(map[string]permissionDataInProvince),
-		}
-	}
-	if regionType == PROVINCE {
-		db.Distributors[distributor][countryCode].Inclusions[provinceCode] = permissionDataInProvince{
-			PermissionType: allowAll,
-			Inclusions:     make(map[string]bool),
-			Exclusions:     make(map[string]bool),
-		}
-		return
-	}
+					if _, exists := db.Distributors[distributor].includedCities[countryCode]; exists {
+						delete(db.Distributors[distributor].includedCities[countryCode], provinceCode)
+					}
+				}
+			}
+			if _, exists := db.Distributors[distributor].excludedCities[countryCode]; exists {
+				delete(db.Distributors[distributor].excludedCities[countryCode], provinceCode)
+			}
+			//no need to check in includedProvinces, because country is already included. so there will be only exceptions
+		} else {
+			//no need to check in excludedProvinces, because country is not included to have exceptions
+			if _, exists := db.Distributors[distributor].includedProvinces[countryCode]; exists {
+				if db.Distributors[distributor].includedProvinces[countryCode][provinceCode] {
 
-	if _, ok := db.Distributors[distributor][countryCode].Inclusions[provinceCode]; !ok {
-		db.Distributors[distributor][countryCode].Inclusions[provinceCode] = permissionDataInProvince{
-			PermissionType: custom,
-			Inclusions:     make(map[string]bool),
-			Exclusions:     make(map[string]bool),
+					//excudedCities are no longer excluded as the province is now included
+					if _, exists := db.Distributors[distributor].excludedCities[countryCode]; exists {
+						delete(db.Distributors[distributor].excludedCities[countryCode], provinceCode)
+					}
+				} else {
+					db.Distributors[distributor].includedProvinces[countryCode][provinceCode] = true
+
+					//deleting includedCities in this province as the province itself is now included as a whole
+					if _, exists := db.Distributors[distributor].includedCities[countryCode]; exists {
+						delete(db.Distributors[distributor].includedCities[countryCode], provinceCode)
+					}
+				}
+			} else {
+				db.Distributors[distributor].includedProvinces[countryCode] = map[string]bool{provinceCode: true}
+
+				//deleting includedCities in this province as the province itself is now included as a whole
+				if _, exists := db.Distributors[distributor].includedCities[countryCode]; exists {
+					delete(db.Distributors[distributor].includedCities[countryCode], provinceCode)
+				}
+				//as country or province were not there as 'included', so no need to check in excludedCities either
+			}
+		}
+	case CITY:
+		if db.Distributors[distributor].includedCountries[countryCode] {
+			//there is no need to check in includedProvinces, because country is already included. so there will be only exceptions
+
+			//checking in excludedProvinces:
+			if _, exists := db.Distributors[distributor].excludedProvinces[countryCode]; exists {
+				if db.Distributors[distributor].excludedProvinces[countryCode][provinceCode] {
+
+					// if the province is excluded, then the city should be made to be included
+					if _, exists := db.Distributors[distributor].includedCities[countryCode]; exists {
+						if _, exists := db.Distributors[distributor].includedCities[countryCode][provinceCode]; !exists {
+							db.Distributors[distributor].includedCities[countryCode][provinceCode] = map[string]bool{cityCode: true}
+						}
+					} else {
+						db.Distributors[distributor].includedCities[countryCode] = map[string]map[string]bool{provinceCode: {cityCode: true}}
+					}
+				}
+			}
+
+			//checking in excludedCities:
+			if _, exists := db.Distributors[distributor].excludedCities[countryCode]; exists {
+				if _, exists := db.Distributors[distributor].excludedCities[countryCode][provinceCode]; exists {
+					delete(db.Distributors[distributor].excludedCities[countryCode][provinceCode], cityCode)
+				}
+			}
+		} else {
+			//as not even the country is included, we just have to check in includedProvinces+excludedCities and includedCities
+
+			//checking in includedProvinces:
+			if _, exists := db.Distributors[distributor].includedProvinces[countryCode]; exists {
+				if db.Distributors[distributor].includedProvinces[countryCode][provinceCode] {
+
+					//ensure that city is not excluded
+					if _, exists := db.Distributors[distributor].excludedCities[countryCode]; exists {
+						if _, exists := db.Distributors[distributor].excludedCities[countryCode][provinceCode]; exists {
+							delete(db.Distributors[distributor].excludedCities[countryCode][provinceCode], cityCode)
+						}
+					}
+
+				} else {
+					//if the province is not included, then the city should be included
+					if _, exists := db.Distributors[distributor].includedCities[countryCode]; exists {
+						if _, exists := db.Distributors[distributor].includedCities[countryCode][provinceCode]; !exists {
+							db.Distributors[distributor].includedCities[countryCode][provinceCode] = map[string]bool{cityCode: true}
+						} else {
+							db.Distributors[distributor].includedCities[countryCode][provinceCode][cityCode] = true
+						}
+					} else {
+						db.Distributors[distributor].includedCities[countryCode] = map[string]map[string]bool{provinceCode: {cityCode: true}}
+					}
+				}
+			} else {
+
+				//if the province is not included along with country not being included, then the city should be included
+				if _, exists := db.Distributors[distributor].includedCities[countryCode]; exists {
+					if _, exists := db.Distributors[distributor].includedCities[countryCode][provinceCode]; !exists {
+						db.Distributors[distributor].includedCities[countryCode][provinceCode] = map[string]bool{cityCode: true}
+					} else {
+						db.Distributors[distributor].includedCities[countryCode][provinceCode][cityCode] = true
+					}
+				} else {
+					db.Distributors[distributor].includedCities[countryCode] = map[string]map[string]bool{provinceCode: {cityCode: true}}
+				}
+
+				//as country or province were not there as 'included', so need to check in excludedCities
+				if _, exists := db.Distributors[distributor].excludedCities[countryCode]; exists {
+					if _, exists := db.Distributors[distributor].excludedCities[countryCode][provinceCode]; exists {
+						delete(db.Distributors[distributor].excludedCities[countryCode][provinceCode], cityCode)
+					}
+				}
+
+			}
 		}
 	}
-
-	db.Distributors[distributor][countryCode].Inclusions[provinceCode].Inclusions[cityCode] = true
-	return
 }
 
 func (db *DataBank) MarkExclusion(distributor, regionString string) response.Response {
-	db.mu.Lock()
-	defer db.mu.Unlock()
-	if _, ok := db.Distributors[distributor]; !ok {
-		return response.CreateError(404, DISTRIBUTOR_NOT_FOUND, ErrDistributorNotFound)
+	if !db.distributorExists(distributor) {
+		return response.CreateError(404, DISTRIBUTOR_NOT_FOUND, fmt.Errorf("distributor %s not found", distributor))
 	}
 
-	countryCode, provinceCode, cityCode, regionType, err := regions.GetRegionDetails(regionString)
+	region, err := regions.GetRegionDetails(regionString)
 	if err != nil {
 		return response.CreateError(404, REGION_NOT_FOUND, err)
 	}
 
-	db.markAsExcluded(distributor, countryCode, provinceCode, cityCode, regionType)
+	db.markAsExcluded(distributor, region)
 	return successResponse
 }
 
-func (db *DataBank) markAsExcluded(distributor, countryCode, provinceCode, cityCode, regionType string) {
+func (db *DataBank) markAsExcluded(distributor string, region regions.Region) {
+	db.createDistributorIfNotExists(distributor)
+
+	countryCode, provinceCode, cityCode := region.CountryCode, region.ProvinceCode, region.CityCode
+
 	db.mu.Lock()
 	defer db.mu.Unlock()
 
-	if regionType == COUNTRY {
-		db.Distributors[distributor][countryCode] = permissionDataInCountry{
-			PermissionType: denyAll,
-			Inclusions:     make(map[string]permissionDataInProvince),
-			Exclusions:     make(map[string]permissionDataInProvince),
-		}
-		return
-	}
-	if _, ok := db.Distributors[distributor][countryCode]; !ok {
-		db.Distributors[distributor][countryCode] = permissionDataInCountry{
-			PermissionType: custom,
-			Inclusions:     make(map[string]permissionDataInProvince),
-			Exclusions:     make(map[string]permissionDataInProvince),
-		}
-	}
-	if regionType == PROVINCE {
+	switch region.Type {
+	case COUNTRY:
+		delete(db.Distributors[distributor].includedCountries, countryCode)
+		delete(db.Distributors[distributor].includedProvinces, countryCode)
+		delete(db.Distributors[distributor].includedCities, countryCode)
+		delete(db.Distributors[distributor].excludedProvinces, countryCode)
+		delete(db.Distributors[distributor].excludedCities, countryCode)
 
-		db.Distributors[distributor][countryCode].Exclusions[provinceCode] = permissionDataInProvince{
-			PermissionType: denyAll,
-			Inclusions:     make(map[string]bool),
-			Exclusions:     make(map[string]bool),
+	case PROVINCE:
+		if db.Distributors[distributor].includedCountries[countryCode] {
+			//if the country is included, then the province should be excluded
+			if _, exists := db.Distributors[distributor].excludedProvinces[countryCode]; exists {
+				db.Distributors[distributor].excludedProvinces[countryCode][provinceCode] = true
+			} else {
+				db.Distributors[distributor].excludedProvinces[countryCode] = map[string]bool{provinceCode: true}
+			}
+
+			//as the province as a whole is excluded, then the cities in the province need not be in excluded list
+			if _, exists := db.Distributors[distributor].excludedCities[countryCode]; exists {
+				delete(db.Distributors[distributor].excludedCities[countryCode], provinceCode)
+			}
+		} else {
+			//if the country is not included, then the province should not be in included list
+			if _, exists := db.Distributors[distributor].includedProvinces[countryCode]; exists {
+				if db.Distributors[distributor].includedProvinces[countryCode][provinceCode] {
+					delete(db.Distributors[distributor].includedProvinces[countryCode], provinceCode)
+
+					//as the province is excluded, then the cities in the province need not be in excluded list
+					if _, exists := db.Distributors[distributor].excludedCities[countryCode]; exists {
+						delete(db.Distributors[distributor].excludedCities[countryCode], provinceCode)
+					}
+				}
+			}
+
+			//ensure that no city in the province is in included list
+			if _, exists := db.Distributors[distributor].includedCities[countryCode]; exists {
+				delete(db.Distributors[distributor].includedCities[countryCode], provinceCode)
+			}
+
 		}
-		return
+
+	case CITY:
+		if db.Distributors[distributor].includedCountries[countryCode] {
+			//check if the province is excluded
+			if _, exists := db.Distributors[distributor].excludedProvinces[countryCode]; exists && db.Distributors[distributor].excludedProvinces[countryCode][provinceCode] {
+				//if the province is excluded, then the city should not be in included list
+				if _, exists := db.Distributors[distributor].includedCities[countryCode]; exists {
+					if _, exists := db.Distributors[distributor].includedCities[countryCode][provinceCode]; exists {
+						delete(db.Distributors[distributor].includedCities[countryCode][provinceCode], cityCode)
+					}
+				}
+			} else { //if the province is not excluded, then the city should be in excluded list
+				if _, exists := db.Distributors[distributor].excludedCities[countryCode]; exists {
+					if _, exists := db.Distributors[distributor].excludedCities[countryCode][provinceCode]; exists {
+						db.Distributors[distributor].excludedCities[countryCode][provinceCode][cityCode] = true
+					} else {
+						db.Distributors[distributor].excludedCities[countryCode][provinceCode] = map[string]bool{cityCode: true}
+					}
+				} else {
+					db.Distributors[distributor].excludedCities[countryCode] = map[string]map[string]bool{provinceCode: {cityCode: true}}
+				}
+			}
+		} else { //if the country is not included, then either (the city should be in excluded list) or (the province should be in excluded list with no exception for the city)
+			if _, exists := db.Distributors[distributor].excludedProvinces[countryCode]; exists && db.Distributors[distributor].excludedProvinces[countryCode][provinceCode] {
+				if _, exists := db.Distributors[distributor].excludedCities[countryCode]; exists {
+					if _, exists := db.Distributors[distributor].excludedCities[countryCode][provinceCode]; exists {
+						db.Distributors[distributor].excludedCities[countryCode][provinceCode][cityCode] = true
+					} else {
+						db.Distributors[distributor].excludedCities[countryCode][provinceCode] = map[string]bool{cityCode: true}
+					}
+				} else {
+					db.Distributors[distributor].excludedCities[countryCode] = map[string]map[string]bool{provinceCode: {cityCode: true}}
+				}
+			} else { //if the province is not excluded, then the city should be in excluded list
+				if _, exists := db.Distributors[distributor].excludedCities[countryCode]; exists {
+					if _, exists := db.Distributors[distributor].excludedCities[countryCode][provinceCode]; exists {
+						db.Distributors[distributor].excludedCities[countryCode][provinceCode][cityCode] = true
+					} else {
+						db.Distributors[distributor].excludedCities[countryCode][provinceCode] = map[string]bool{cityCode: true}
+					}
+				} else {
+					db.Distributors[distributor].excludedCities[countryCode] = map[string]map[string]bool{provinceCode: {cityCode: true}}
+				}
+			}
+
+		}
+
 	}
 
-	if _, ok := db.Distributors[distributor][countryCode].Exclusions[provinceCode]; !ok {
-		db.Distributors[distributor][countryCode].Exclusions[provinceCode] = permissionDataInProvince{
-			PermissionType: custom,
-			Inclusions:     make(map[string]bool),
-			Exclusions:     make(map[string]bool),
-		}
-	}
-
-	db.Distributors[distributor][countryCode].Exclusions[provinceCode].Exclusions[cityCode] = false
-	return
 }
 
 func (db *DataBank) AddDistributor(distributor string) response.Response {
-	db.mu.Lock()
-	defer db.mu.Unlock()
-	if _, ok := db.Distributors[distributor]; ok {
+	if db.distributorExists(distributor) {
 		return response.CreateError(400, "DISTRIBUTOR_EXISTS", ErrDistributorExists)
 	}
-	db.Distributors[distributor] = make(permissionDataGlobal)
+	db.mu.Lock()
+	defer db.mu.Unlock()
+	db.Distributors[distributor] = newPermissionData()
 	return createdResponse
 }
 
 func (db *DataBank) RemoveDistributor(distributor string) response.Response {
-	db.mu.Lock()
-	defer db.mu.Unlock()
-	if _, ok := db.Distributors[distributor]; !ok {
+	if !db.distributorExists(distributor) {
 		return response.CreateError(404, DISTRIBUTOR_NOT_FOUND, ErrDistributorNotFound)
 	}
+
+	db.mu.Lock()
+	defer db.mu.Unlock()
 	delete(db.Distributors, distributor)
-	return successResponse
-}
-
-func (db *DataBank) ApplyContract(distributorHeirarchy, includeRegions, excludeRegions []string) response.Response {
-	if len(distributorHeirarchy) > 1 {
-		//ensure that they have required permission
-		for i := 1; i < len(distributorHeirarchy); i++ { //skip the first distributor as it may be a new distributor
-			if _, ok := db.Distributors[distributorHeirarchy[i]]; !ok {
-				return response.CreateError(404, DISTRIBUTOR_NOT_FOUND, fmt.Errorf("parent distributor %s not found", distributorHeirarchy[i]))
-			}
-		}
-
-		for _, region := range includeRegions {
-			countryCode, provinceCode, cityCode, regionType, err := regions.GetRegionDetails(region)
-			if err != nil {
-				return response.CreateError(404, REGION_NOT_FOUND, err)
-			}
-
-			//check if the region is allowed for the immediate parent distributor
-			isAllowedForImmediateParent := db.isAllowedForTheDistributor(distributorHeirarchy[1], countryCode, provinceCode, cityCode, regionType)
-			if !isAllowedForImmediateParent {
-				return response.CreateError(200, "DISTRIBUTION_NOT_ALLOWED", fmt.Errorf("distribution not allowed for the immediate parent(%s) in region %s which is mentioned in 'INCLUDE'", distributorHeirarchy[1], region))
-			}
-		}
-	}
-
-	//validate the regions mentioned in the contract
-	for _, region := range includeRegions {
-		_, _, _, _, err := regions.GetRegionDetails(region)
-		if err != nil {
-			return response.CreateError(404, REGION_NOT_FOUND, err)
-		}
-	}
-
-	for _, region := range excludeRegions {
-		_, _, _, _, err := regions.GetRegionDetails(region)
-		if err != nil {
-			return response.CreateError(404, REGION_NOT_FOUND, err)
-		}
-	}
-
-	if _, ok := db.Distributors[distributorHeirarchy[0]]; !ok {
-		db.Distributors[distributorHeirarchy[0]] = make(permissionDataGlobal)
-	}
-
-	//apply the contract
-	for _, includeRegion := range includeRegions {
-		countryCode, provinceCode, cityCode, regionType, _ := regions.GetRegionDetails(includeRegion)
-		db.markAsIncluded(distributorHeirarchy[0], countryCode, provinceCode, cityCode, regionType)
-	}
-
-	for _, excludeRegion := range excludeRegions {
-		countryCode, provinceCode, cityCode, regionType, _ := regions.GetRegionDetails(excludeRegion)
-		if !db.isAllowedForTheDistributor(distributorHeirarchy[0], countryCode, provinceCode, cityCode, regionType) {
-			continue //if the region is already in allow list(possibly by other contracts), then no need to exclude it
-		} else {
-			db.markAsExcluded(distributorHeirarchy[0], countryCode, provinceCode, cityCode, regionType)
-		}
-	}
 
 	return successResponse
 }
 
-func (db *DataBank) isAllowedForTheDistributor(distributor, countryCode, provinceCode, cityCode, regionType string) bool {
+func (db *DataBank) isAllowedForTheDistributor(distributor string, region regions.Region) (bool, string) {
+	const (
+		PARTIALLY_ALLOWED = "PARTIALLY_ALLOWED"
+		FULLY_ALLOWED     = "FULLY_ALLOWED"
+		FULLY_DENIED      = "FULLY_DENIED"
+	)
 	db.mu.RLock()
 	defer db.mu.RUnlock()
-	permissionDataGlobally, ok := db.Distributors[distributor]
+	permissionData, ok := db.Distributors[distributor]
 	if !ok {
-		return false
+		return false, ""
 	}
 
-	if permissionDataInCountry, exists := permissionDataGlobally[countryCode]; exists {
-		switch permissionDataInCountry.PermissionType {
-		case allowAll:
-			return true
-		case denyAll:
-			return false
-		default:
-			if regionType == COUNTRY {
-				return false
+	countryCode, provinceCode, cityCode, regionType := region.CountryCode, region.ProvinceCode, region.CityCode, region.Type
+
+	switch regionType {
+	case COUNTRY:
+		if permissionData.includedCountries[countryCode] {
+			if len(permissionData.excludedProvinces[countryCode]) > 0 {
+				return false, PARTIALLY_ALLOWED
+			}
+			if len(permissionData.excludedCities[countryCode]) > 0 {
+				return false, PARTIALLY_ALLOWED
+			}
+			return true, FULLY_ALLOWED
+		} else {
+			if len(permissionData.includedProvinces[countryCode]) > 0 {
+				return false, PARTIALLY_ALLOWED
+			}
+			for provinceCode := range permissionData.includedCities[countryCode] {
+				if len(permissionData.includedCities[countryCode][provinceCode]) > 0 {
+					return false, PARTIALLY_ALLOWED
+				}
+			}
+			return false, FULLY_DENIED
+		}
+	case PROVINCE:
+		if permissionData.includedCountries[countryCode] {
+			if _, exists := permissionData.excludedProvinces[countryCode]; exists && permissionData.excludedProvinces[countryCode][provinceCode] {
+				return false, FULLY_DENIED
+			}
+			if _, exists := permissionData.excludedCities[countryCode]; exists && len(permissionData.excludedCities[countryCode][provinceCode]) > 0 {
+				return false, PARTIALLY_ALLOWED
+			}
+			return true, FULLY_ALLOWED
+		} else {
+			if _, exists := permissionData.includedProvinces[countryCode]; exists && permissionData.includedProvinces[countryCode][provinceCode] {
+				if _, exists := permissionData.excludedCities[countryCode]; exists && len(permissionData.excludedCities[countryCode][provinceCode]) > 0 {
+					return false, PARTIALLY_ALLOWED
+				}
+				return true, FULLY_ALLOWED
+			} else {
+				if _, exists := permissionData.includedCities[countryCode]; exists {
+					if _, exists := permissionData.includedCities[countryCode][provinceCode]; exists && len(permissionData.includedCities[countryCode][provinceCode]) > 0 {
+						return false, PARTIALLY_ALLOWED
+					}
+				}
 			}
 		}
-		if permissionDataInProvince, exists := permissionDataInCountry.Inclusions[provinceCode]; exists {
-			switch permissionDataInProvince.PermissionType {
-			case allowAll:
-				return true
-			case denyAll:
-				return false
-			default:
-				if regionType == PROVINCE {
-					return false
+	case CITY:
+		if permissionData.includedCountries[countryCode] {
+			if _, exists := permissionData.excludedProvinces[countryCode]; exists && permissionData.excludedProvinces[countryCode][provinceCode] {
+				return false, FULLY_DENIED
+			}
+			if _, exists := permissionData.excludedCities[countryCode]; exists {
+				if _, exists := permissionData.excludedCities[countryCode][provinceCode]; exists && permissionData.excludedCities[countryCode][provinceCode][cityCode] {
+					return false, FULLY_DENIED
 				}
-				if permissionDataInProvince.Inclusions[cityCode] {
-					return true
+				return true, FULLY_ALLOWED
+			} else {
+				if _, exists := permissionData.includedProvinces[countryCode]; exists && permissionData.includedProvinces[countryCode][provinceCode] {
+					if _, exists := permissionData.excludedCities[countryCode]; exists {
+						if _, exists := permissionData.excludedCities[countryCode][provinceCode]; exists && permissionData.excludedCities[countryCode][provinceCode][cityCode] {
+							return false, FULLY_DENIED
+						}
+					}
+					return true, FULLY_ALLOWED
 				}
+				if _, exists := permissionData.includedCities[countryCode]; exists {
+					if _, exists := permissionData.includedCities[countryCode][provinceCode]; exists && permissionData.includedCities[countryCode][provinceCode][cityCode] {
+						return true, FULLY_ALLOWED
+					}
+				}
+				return false, FULLY_DENIED
 			}
 		}
 	}
-	return false
+
+	return false, "UNKNOWN" //this should never happen, as the region type is already validated
 }
 
 func (db *DataBank) GetDistributors() response.Response {
@@ -306,7 +441,7 @@ func (db *DataBank) GetDistributors() response.Response {
 }
 
 func (db *DataBank) CheckIfDistributionIsAllowed(distributor, regionString string) response.Response {
-	countryCode, provinceCode, cityCode, regionType, err := regions.GetRegionDetails(regionString)
+	region, err := regions.GetRegionDetails(regionString)
 	if err != nil {
 		return response.CreateError(404, REGION_NOT_FOUND, err)
 	}
@@ -315,10 +450,8 @@ func (db *DataBank) CheckIfDistributionIsAllowed(distributor, regionString strin
 		return response.CreateError(404, DISTRIBUTOR_NOT_FOUND, fmt.Errorf("distributor %s not found", distributor))
 	}
 
-	if db.isAllowedForTheDistributor(distributor, countryCode, provinceCode, cityCode, regionType) {
-		return response.CreateSuccess(200, "DISTRIBUTION_ALLOWED", nil)
-	}
-	return response.CreateError(200, "DISTRIBUTION_NOT_ALLOWED", fmt.Errorf("distribution not allowed for the distributor in region %s", regionString))
+	_, status := db.isAllowedForTheDistributor(distributor, region)
+	return response.CreateSuccess(200, status, nil)
 }
 
 func (db *DataBank) distributorExists(distributor string) bool {
@@ -328,4 +461,110 @@ func (db *DataBank) distributorExists(distributor string) bool {
 		return true
 	}
 	return false
+}
+
+// func (db *DataBank) getParentRegions(distributor string) ([]regions.Region, []regions.Region) {
+// 	return nil, nil
+// }
+
+func (db *DataBank) getDistributorPermissionCopy(distributor string) (permissionData, bool) {
+	db.mu.RLock()
+	defer db.mu.RUnlock()
+	if permissionData, ok := db.Distributors[distributor]; ok {
+		return permissionData.copyPermissionData(), true
+	}
+	return permissionData{}, false
+}
+
+func (db *DataBank) GetDistributorPermissionsAsText(distributor string) string {
+	permissionData, ok := db.getDistributorPermissionCopy(distributor)
+	if !ok {
+		return "Distributor not found"
+	}
+
+	builder := new(strings.Builder)
+	builder.WriteString("Permissions for " + distributor)
+
+	for country := range permissionData.includedCountries {
+		builder.WriteString("\nINCLUDE: " + country)
+	}
+	for country := range permissionData.includedProvinces {
+		for province := range permissionData.includedProvinces[country] {
+			builder.WriteString("\nINCLUDE: " + province + "-" + country)
+		}
+	}
+	for country := range permissionData.includedCities {
+		for province := range permissionData.includedCities[country] {
+			for city := range permissionData.includedCities[country][province] {
+				builder.WriteString("\nINCLUDE: " + city + "-" + province + "-" + country)
+			}
+		}
+	}
+
+	for country := range permissionData.excludedProvinces {
+		for province := range permissionData.excludedProvinces[country] {
+			builder.WriteString("\nEXCLUDE: " + province + "-" + country)
+		}
+	}
+	for country := range permissionData.excludedCities {
+		for province := range permissionData.excludedCities[country] {
+			for city := range permissionData.excludedCities[country][province] {
+				builder.WriteString("\nEXCLUDE: " + city + "-" + province + "-" + country)
+			}
+		}
+	}
+
+	return builder.String()
+}
+
+func (db *DataBank) GetDistributorPermissionAsJSON(distributor string) response.Response {
+	permissionData, ok := db.getDistributorPermissionCopy(distributor)
+	if !ok {
+		return response.CreateError(404, DISTRIBUTOR_NOT_FOUND, fmt.Errorf("distributor %s not found", distributor))
+	}
+
+	inclusions := make([]string, 0, len(permissionData.includedCountries)+len(permissionData.includedProvinces)+len(permissionData.includedCities))
+	exclusions := make([]string, 0, len(permissionData.excludedProvinces)+len(permissionData.excludedCities))
+
+	for country := range permissionData.includedCountries {
+		inclusions = append(inclusions, country)
+	}
+	for country := range permissionData.includedProvinces {
+		for province := range permissionData.includedProvinces[country] {
+			inclusions = append(inclusions, province+"-"+country)
+		}
+	}
+	for country := range permissionData.includedCities {
+		for province := range permissionData.includedCities[country] {
+			for city := range permissionData.includedCities[country][province] {
+				inclusions = append(inclusions, city+"-"+province+"-"+country)
+			}
+		}
+	}
+
+	for country := range permissionData.excludedProvinces {
+		for province := range permissionData.excludedProvinces[country] {
+			exclusions = append(exclusions, province+"-"+country)
+		}
+	}
+
+	for country := range permissionData.excludedCities {
+		for province := range permissionData.excludedCities[country] {
+			for city := range permissionData.excludedCities[country][province] {
+				exclusions = append(exclusions, city+"-"+province+"-"+country)
+			}
+		}
+	}
+
+	resp := struct {
+		Distributor string
+		Included    []string
+		Excluded    []string
+	}{
+		Distributor: distributor,
+		Included:    inclusions,
+		Excluded:    exclusions,
+	}
+
+	return response.CreateSuccess(200, "SUCCESS", resp)
 }

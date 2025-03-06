@@ -31,7 +31,7 @@ func (h *handler) RemoveDistributor(c *fiber.Ctx) error {
 	return resp.WriteToJSON(c)
 }
 
-func (h *handler) GetDistributers(c *fiber.Ctx) error {
+func (h *handler) GetDistributors(c *fiber.Ctx) error {
 	resp := h.databank.GetDistributors()
 	return resp.WriteToJSON(c)
 }
