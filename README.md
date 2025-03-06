@@ -20,6 +20,71 @@ This project was developed as part of a machine task for a company interview pro
   - Hierarchical region structure (Country → Province → City)
   - Region validation against cities.csv database
   - Region code format: "CITYCODE-PROVINCECODE-COUNTRYCODE"
+  
+### Region Format
+- Countries: 2-letter code (e.g., "IN", "US")
+- Provinces: 2-letter code + country (e.g., "TN-IN")
+- Cities: City code + province + country (e.g., "CENAI-TN-IN")
+
+### 🌍 Region Management
+
+#### 1. Get Countries
+- **Endpoint**: `GET /regions/countries`
+- **Description**: Get list of available countries
+- **Success Response**: 200 OK with countries list
+
+#### 2. Get Provinces
+- **Endpoint**: `GET /regions/provinces/:countryCode`
+- **Description**: Get provinces in a country
+- **Path Parameter**: `countryCode`
+- **Success Response**: 200 OK with provinces list
+
+#### 3. Get Cities
+- **Endpoint**: `GET /regions/cities/:countryCode/:provinceCode`
+- **Description**: Get cities in a province
+- **Path Parameters**: 
+  - `countryCode`
+  - `provinceCode`
+- **Success Response**: 200 OK with cities list
+
+## 🏗️ Technical Implementation
+
+### 🎨 Architecture  
+- **Clean Architecture Pattern**  
+  - Separation of concerns with handlers and business logic  
+  - RESTful API design  
+  - Modular component structure  
+
+### 🛡️ Security Enhancements
+- **Rate Limiting**: Prevents excessive API requests to safeguard system resources
+- **Data Validation & Sanitization**: Ensures proper input handling to avoid malicious data
+
+### 🔧 Key Components  
+1. **Route Handlers** (`internal/handler`)  
+   - HTTP request handling  
+   - Input validation  
+   - Response formatting  
+   - Error handling  
+
+2. **Data Management**  
+   - In-memory data storage  
+   - Thread-safe operations using `sync.RWMutex`  
+   - CSV-based region validation  
+   - Contract validation and processing  
+  
+### ⚙️ Technical Features
+- Region validation against cities.csv
+- Concurrent access handling with sync.RWMutex
+- Hierarchical permission system
+- Contract-based permission management
+- Region-based distribution control
+
+## 📝 Technical Notes
+- Thread-safe operations using read-write mutex locks
+- CSV-based region validation
+- Hierarchical region structure validation
+- Contract template validation
+
 
 ## 🚀 How to use
 
@@ -38,6 +103,7 @@ cd machine_task-challenge2016
 ```bash
 touch .env
 echo PORT="4010" >> .env # Or any other port number
+echo RATE_LIMIT="60" >> .env # Requests per minute limit
 ```
 
 3. Build the project
@@ -52,10 +118,6 @@ make build
 
 The server will start on `localhost:4010` (or the port specified in the .env file).
 
-### Region Format
-• Countries: 2-letter code (e.g., "IN", "US")
-• Provinces: 2-letter code + country (e.g., "TN-IN")
-• Cities: City code + province + country (e.g., "CENAI-TN-IN")
 
 ## 🛠️ API Endpoints
 
@@ -160,64 +222,6 @@ The server will start on `localhost:4010` (or the port specified in the .env fil
     }
     ```
 
-### 🌍 Region Management
-
-#### 1. Get Countries
-- **Endpoint**: `GET /regions/countries`
-- **Description**: Get list of available countries
-- **Success Response**: 200 OK with countries list
-
-#### 2. Get Provinces
-- **Endpoint**: `GET /regions/provinces/:countryCode`
-- **Description**: Get provinces in a country
-- **Path Parameter**: `countryCode`
-- **Success Response**: 200 OK with provinces list
-
-#### 3. Get Cities
-- **Endpoint**: `GET /regions/cities/:countryCode/:provinceCode`
-- **Description**: Get cities in a province
-- **Path Parameters**: 
-  - `countryCode`
-  - `provinceCode`
-- **Success Response**: 200 OK with cities list
-
-## 🏗️ Technical Implementation
-
-### 🎨 Architecture  
-- **Clean Architecture Pattern**  
-  - Separation of concerns with handlers and business logic  
-  - RESTful API design  
-  - Modular component structure  
-
-### 🛡️ Security Enhancements
-- **Rate Limiting**: Prevents excessive API requests to safeguard system resources
-- **Data Validation & Sanitization**: Ensures proper input handling to avoid malicious data
-
-### 🔧 Key Components  
-1. **Route Handlers** (`internal/handler`)  
-   - HTTP request handling  
-   - Input validation  
-   - Response formatting  
-   - Error handling  
-
-2. **Data Management**  
-   - In-memory data storage  
-   - Thread-safe operations using `sync.RWMutex`  
-   - CSV-based region validation  
-   - Contract validation and processing  
-  
-### ⚙️ Technical Features
-- Region validation against cities.csv
-- Concurrent access handling with sync.RWMutex
-- Hierarchical permission system
-- Contract-based permission management
-- Region-based distribution control
-
-## 📝 Technical Notes
-- Thread-safe operations using read-write mutex locks
-- CSV-based region validation
-- Hierarchical region structure validation
-- Contract template validation
 
 ## 🚀 Potential Improvements (if assignment is flexible)
 
