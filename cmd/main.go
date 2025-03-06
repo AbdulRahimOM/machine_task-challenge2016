@@ -1,6 +1,7 @@
 package main
 
 import (
+	"challenge16/internal/config"
 	"challenge16/internal/handler"
 	"fmt"
 
@@ -41,7 +42,7 @@ func main() {
 		}
 	}
 
-	err := app.Listen(fmt.Sprintf(":4010"))
+	err := app.Listen(fmt.Sprintf(":%s", config.Port))
 	if err != nil {
 		panic("Couldn't start the server. Error: " + err.Error())
 	}

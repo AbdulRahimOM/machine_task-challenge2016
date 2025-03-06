@@ -1,36 +1,74 @@
-# Distribution Management System
+# 🏢 Distribution Management System
 
 This project was developed as part of a machine task for a company interview process. It implements a distribution management system with features for managing distributors and their permissions across different regions.
 
-## Core Features
+## 🎯 Core Features
 
-- **Distributor Management**
+📦 **Distributor Management**
   - Add new distributors
   - Remove existing distributors
-  - Create sub-distributor relationships
-  - Region-based validation using cities.csv data
+  - List all distributors
 
-- **Permission Control**
-  - Allow distribution rights
-  - Revoke distribution rights
-  - Check distribution permission status
+🔑 **Permission Management**
+  - Allow distribution rights over a region
+  - Disallow distribution rights over a region
+  - Check permission status over specific regions (Responses: FULLY_ALLOWED/PARTIALLY_ALLOWED/FULLY_DENIED)
+  - View distributor-specific permissions (As text(contract) or JSON)
+  - Contract-based permission management
 
-- **Validation System**
+🌍 **Region Management**
+  - Hierarchical region structure (Country → Province → City)
   - Region validation against cities.csv database
-  - Distributor existence verification
+  - Region code format: "CITYCODE-PROVINCECODE-COUNTRYCODE"
 
-## API Endpoints
+## 🚀 How to use
 
-### Distributor Management
+### Prerequisites  
+- Go 1.23 or higher  
+- Git  
+
+### Installation
+1. Clone the repository
+```bash
+git clone https://github.com/AbdulRahimOM/machine_task-challenge2016.git
+cd machine_task-challenge2016
+```
+
+2. Set up environment variables
+```bash
+touch .env
+echo PORT="4010" >> .env # Or any other port number
+```
+
+3. Build the project
+```bash
+make build
+```
+
+4. Run the server
+```bash
+./bin/app
+```
+
+The server will start on `localhost:4010` (or the port specified in the .env file).
+
+### Region Format
+• Countries: 2-letter code (e.g., "IN", "US")
+• Provinces: 2-letter code + country (e.g., "TN-IN")
+• Cities: City code + province + country (e.g., "CENAI-TN-IN")
+
+## 🛠️ API Endpoints
+
+### 📦 Distributor Management
 
 #### 1. Add Distributor
 - **Endpoint**: `POST /distributor`
 - **Description**: Register a new distributor in the system
 - **Request Body**:
-```json
-{
-    "distributor":"distributor_name"
-}
+  ```json
+  {
+    "distributor": "distributor_name"
+  }
   ```
 - **Success Response**: 201 Created
 
@@ -40,23 +78,16 @@ This project was developed as part of a machine task for a company interview pro
 - **Path Parameter**: `distributor` - Name of the distributor
 - **Success Response**: 200 OK
 
-#### 3. Add Sub-Distributor
-- **Endpoint**: `POST /distributor/add-sub`
-- **Description**: Create a hierarchical relationship between distributors
-- **Request Body**:
-  ```json
-{
-    "parent_distributor":"distributor_name",
-    "sub_distributor":"new_sub_distributor_name""
-}
-  ```
-- **Success Response**: 201 Created
+#### 3. Get Distributors
+- **Endpoint**: `GET /distributor`
+- **Description**: Retrieve list of all distributors
+- **Success Response**: 200 OK with distributors list
 
-### Permission Management
+### 🔑 Permission Management
 
 #### 1. Check Distribution Permission
 - **Endpoint**: `GET /permission/check`
-- **Description**: Verify if a distributor has permission for a specific region
+- **Description**: Verify distribution permission status for a region
 - **Query Parameters**: 
   - `distributor`: Distributor name
   - `region`: Region to check
@@ -64,19 +95,24 @@ This project was developed as part of a machine task for a company interview pro
 
 #### 2. Allow Distribution
 - **Endpoint**: `POST /permission/allow`
-- **Description**: Grant distribution rights to a distributor
+- **Description**: Grant distribution rights for a region
 - **Request Body**:
   ```json
   {
     "distributor": "distributor_name",
-    "region": "region_name" (Eg: "KLRAI-TN-IN")
+    "region": "region_name" // Example: "KLRAI-TN-IN"
   }
   ```
 - **Success Response**: 200 OK
 
-#### 3. Disallow Distribution
+#### 3. Apply Contract
+- **Endpoint**: `POST /permission/contract`
+- **Description**: Apply distribution contract with permissions
+- **Success Response**: 200 OK
+
+#### 4. Disallow Distribution
 - **Endpoint**: `POST /permission/disallow`
-- **Description**: Revoke distribution rights from a distributor
+- **Description**: Revoke distribution rights
 - **Request Body**:
   ```json
   {
@@ -86,53 +122,110 @@ This project was developed as part of a machine task for a company interview pro
   ```
 - **Success Response**: 200 OK
 
-## Technical Implementation
+#### 5. Get Distributor Permissions
+- **Endpoint**: `GET /permission/:distributor`
+- **Description**: Retrieve all permissions for a distributor in either JSON or contract text format
+- **Path Parameter**: `distributor` - Name of the distributor
+- **Query Parameter**: `type` - Response format type ("json" or "text")
+  - `json`: Returns structured JSON format with permissions
+  - `text`: Returns formatted contract-like text representation
+- **Success Response**: 200 OK with permissions in requested format
+- **Response Examples**:
+  - Text format (`type=text`):
+    ```text
+    Permissions for DISTRIBUTOR1
+    INCLUDE: IN
+    INCLUDE: US
+    INCLUDE: ONATI-SS-ES
+    EXCLUDE: KA-IN
+    EXCLUDE: CENAI-TN-IN
+    ```
+  - JSON format (`type=json`):
+    ```json
+    {
+        "status": true,
+        "resp_code": "SUCCESS",
+        "data": {
+            "Distributor": "DISTRIBUTOR1",
+            "Included": [
+                "IN",
+                "US",
+                "ONATI-SS-ES"
+            ],
+            "Excluded": [
+                "KA-IN",
+                "CENAI-TN-IN"
+            ]
+        }
+    }
+    ```
 
-### Implementation Details
-- **Clean Architecture Pattern**
-  - Separation of concerns
-    - Route handlers in `internal/handler`
-    - Distribution logics and saving data handled in `internal/data`
-  - Easy to test and maintain
-- **Validation System**
-  - Region validation using CSV data
-  - Distributor existence checks
-  - Permission hierarchy validation
-- **Concurrency Handling**
-  - Prevention of race conditions during concurrent access using read and write locks (sync.RWMutex)
+### 🌍 Region Management
 
-### Key Components
-1. **Route Handlers** (`internal/handler`)
-   - Handle HTTP requests and responses
-   - Input validation and sanitization
-   - Error handling and response formatting
+#### 1. Get Countries
+- **Endpoint**: `GET /regions/countries`
+- **Description**: Get list of available countries
+- **Success Response**: 200 OK with countries list
 
-2. **Business Logic & Data Management** (`internal/data`)
-   - Distributor management logic
-   - Permission validation and inheritance
-   - Region validation against CSV data
-   - Thread-safe data operations using RWMutex
-   - Optimized read/write locking for better performance
+#### 2. Get Provinces
+- **Endpoint**: `GET /regions/provinces/:countryCode`
+- **Description**: Get provinces in a country
+- **Path Parameter**: `countryCode`
+- **Success Response**: 200 OK with provinces list
 
-## Technical Notes
+#### 3. Get Cities
+- **Endpoint**: `GET /regions/cities/:countryCode/:provinceCode`
+- **Description**: Get cities in a province
+- **Path Parameters**: 
+  - `countryCode`
+  - `provinceCode`
+- **Success Response**: 200 OK with cities list
 
-- The system performs validation against a predefined list of cities/regions from cities.csv
-- Distributor authentication is simplified (no session management) with distributor name passed in request body
-- All operations include validation for distributor existence and permission checks
-- The system maintains hierarchical relationships between distributors and sub-distributors
+## 🏗️ Technical Implementation
 
-## Future Improvements
+### 🎨 Architecture  
+- **Clean Architecture Pattern**  
+  - Separation of concerns with handlers and business logic  
+  - RESTful API design  
+  - Modular component structure  
 
-Potential enhancements that could be added:
-1. Proper authentication and session management
-2. Database persistence for distributor and permission data (restricted by assignment)
-3. Caching layer for frequently accessed data (restricted by assignment)
-4. More detailed logging and monitoring
-5. Rate limiting for API endpoints
-6. Testing(unit and integrated)
+### 🔧 Key Components  
+1. **Route Handlers** (`internal/handler`)  
+   - HTTP request handling  
+   - Input validation  
+   - Response formatting  
+   - Error handling  
 
-## Proposed Model Improvements
+2. **Data Management**  
+   - In-memory data storage  
+   - Thread-safe operations using `sync.RWMutex`  
+   - CSV-based region validation  
+   - Contract validation and processing  
+  
+### ⚙️ Technical Features
+- Region validation against cities.csv
+- Concurrent access handling with sync.RWMutex
+- Hierarchical permission system
+- Contract-based permission management
+- Region-based distribution control
 
-1. **Enhanced Distribution Model**
-   - Create separate entities for distributors
-   - Enable multi-directional distribution relationships
+## 📝 Technical Notes
+- Thread-safe operations using read-write mutex locks
+- CSV-based region validation
+- Hierarchical region structure validation
+- Contract template validation
+
+## 🚀 Potential Improvements (if assignment is flexible)
+
+⏳ **Contract-expiry**  
+   - When contract expires, cascade expiration to all dependent sub-contracts  
+   - Inheritance on contract, and not on permission  
+    ↳ This would be more matching to the real-world scenario, where permissions are time-based and amendable contracts  
+
+🔐 **Distributor Self-Service Portal**  
+   - Implement secure authentication system  
+   - Enable distributors to manage their own sub-contracts  
+    ↳ Create and modify sub-contracts within their permitted scope  
+    ↳ Monitor contract status and expiration dates  
+    ↳ View inheritance chain and dependencies  
+    ↳ Notify them when contract expires  
