@@ -3,7 +3,7 @@ package handler
 import (
 	"challenge16/internal/dto"
 	"challenge16/internal/response"
-	"challenge16/validation"
+	"challenge16/utils/validation"
 	"errors"
 	"strings"
 

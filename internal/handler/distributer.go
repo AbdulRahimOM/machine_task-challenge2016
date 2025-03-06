@@ -2,7 +2,7 @@ package handler
 
 import (
 	"challenge16/internal/response"
-	"challenge16/validation"
+	"challenge16/utils/validation"
 	"errors"
 
 	"github.com/gofiber/fiber/v2"
