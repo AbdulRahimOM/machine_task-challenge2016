@@ -1,7 +1,6 @@
 package server
 
 import (
-	"challenge16/internal/config"
 	"challenge16/internal/handler"
 	"time"
 
@@ -10,11 +9,11 @@ import (
 	"github.com/gofiber/fiber/v2/middleware/logger"
 )
 
-func NewServer() *fiber.App {
+func NewServer(rateLimit int) *fiber.App {
 	app := fiber.New()
 	app.Use(logger.New())
 	app.Use(limiter.New(limiter.Config{
-		Max:        config.RateLimit,
+		Max:        rateLimit,
 		Expiration: 1 * time.Minute,
 	}))
 

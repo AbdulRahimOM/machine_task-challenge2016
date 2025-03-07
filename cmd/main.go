@@ -19,7 +19,7 @@ func main() {
 	//initialize the environment configuration
 	config.LoadEnv(envPath)
 
-	app := server.NewServer()
+	app := server.NewServer(config.RateLimit)
 
 	err := app.Listen(fmt.Sprintf(":%s", config.Port))
 	if err != nil {
