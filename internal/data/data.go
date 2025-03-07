@@ -1,6 +1,7 @@
 package data
 
 import (
+	"challenge16/internal/dto"
 	"challenge16/internal/regions"
 	"challenge16/internal/response"
 	"errors"
@@ -556,15 +557,11 @@ func (db *DataBank) GetDistributorPermissionAsJSON(distributor string) response.
 		}
 	}
 
-	resp := struct {
-		Distributor string
-		Included    []string
-		Excluded    []string
-	}{
+	data:=dto.GetPermissionsData{
 		Distributor: distributor,
 		Included:    inclusions,
 		Excluded:    exclusions,
 	}
 
-	return response.CreateSuccess(200, "SUCCESS", resp)
+	return response.CreateSuccess(200, "SUCCESS", data)
 }

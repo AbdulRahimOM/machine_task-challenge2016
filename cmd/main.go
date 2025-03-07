@@ -2,51 +2,24 @@ package main
 
 import (
 	"challenge16/internal/config"
-	"challenge16/internal/handler"
+	"challenge16/internal/regions"
+	"challenge16/internal/server"
 	"fmt"
-	"time"
+)
 
-	"github.com/gofiber/fiber/v2"
-	"github.com/gofiber/fiber/v2/middleware/limiter"
-	"github.com/gofiber/fiber/v2/middleware/logger"
+const (
+	csvFile = "cities.csv"
+	envPath = ".env"
 )
 
 func main() {
+	//initialize the region data
+	regions.LoadDataIntoMap(csvFile)
 
-	app := fiber.New()
-	app.Use(logger.New())
-	app.Use(limiter.New(limiter.Config{
-		Max:        config.RateLimit,
-		Expiration: 1 * time.Minute,
-	}))
+	//initialize the environment configuration
+	config.LoadEnv(envPath)
 
-	handler := handler.NewHandler()
-
-	//initialize the routes
-	{
-		distributor := app.Group("/distributor")
-		{
-			distributor.Post("/", handler.AddDistributor)
-			distributor.Delete("/:distributor", handler.RemoveDistributor)
-			distributor.Get("/", handler.GetDistributors)
-		}
-
-		permission := app.Group("/permission")
-		{
-			permission.Get("/check", handler.CheckIfDistributionIsAllowed)
-			permission.Post("/allow", handler.AllowDistribution)
-			permission.Post("/contract", handler.ApplyContract)
-			permission.Post("/disallow", handler.DisallowDistribution)
-			permission.Get("/:distributor", handler.GetDistributorPermissions)
-		}
-
-		regions := app.Group("/regions")
-		{
-			regions.Get("/countries", handler.GetCountries)
-			regions.Get("/provinces/:countryCode", handler.GetProvincesInCountry)
-			regions.Get("/cities/:countryCode/:provinceCode", handler.GetCitiesInProvince)
-		}
-	}
+	app := server.NewServer()
 
 	err := app.Listen(fmt.Sprintf(":%s", config.Port))
 	if err != nil {

@@ -13,6 +13,8 @@ const (
 	COUNTRY  = "country"
 	PROVINCE = "province"
 	CITY     = "city"
+
+	InvalidRegionPrefix = "Invalid region, "
 )
 
 func CheckCountry(countryCode string) bool {
@@ -55,14 +57,14 @@ func GetRegionDetails(regionString string) (Region, error) {
 		countryCode = subStrings[0]
 		regionType = COUNTRY
 		if !CheckCountry(countryCode) {
-			err = errors.New("country not found: " + countryCode)
+			err = errors.New(InvalidRegionPrefix + "country not found: " + countryCode)
 		}
 	case 2:
 		countryCode = subStrings[1]
 		provinceCode = subStrings[0]
 		regionType = PROVINCE
 		if !CheckProvince(countryCode, provinceCode) {
-			err = errors.New("country/province not found: " + countryCode + "-" + provinceCode)
+			err = errors.New(InvalidRegionPrefix + "country/province not found: " + countryCode + "-" + provinceCode)
 		}
 	default:
 		countryCode = subStrings[2]
@@ -70,7 +72,7 @@ func GetRegionDetails(regionString string) (Region, error) {
 		cityCode = subStrings[0]
 		regionType = CITY
 		if !CheckCity(countryCode, provinceCode, cityCode) {
-			err = errors.New("country/province/city not found: " + countryCode + "-" + provinceCode + "-" + cityCode)
+			err = errors.New(InvalidRegionPrefix + "country/province/city not found: " + countryCode + "-" + provinceCode + "-" + cityCode)
 		}
 	}
 

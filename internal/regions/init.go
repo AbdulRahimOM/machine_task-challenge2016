@@ -2,8 +2,6 @@ package regions
 
 import (
 	"challenge16/utils"
-	"fmt"
-	"log"
 )
 
 const (
@@ -23,14 +21,6 @@ type (
 )
 
 var Countries = make(map[string]countryData)
-
-func init() {
-	// Load data from CSV into the countries map
-	err := LoadDataIntoMap(filePath)
-	if err != nil {
-		log.Fatal(fmt.Errorf("error loading data into map: %w", err))
-	}
-}
 
 func LoadDataIntoMap(csvFilePath string) error {
 	// Load data from CSV into the countries map

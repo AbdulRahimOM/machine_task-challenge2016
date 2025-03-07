@@ -2,6 +2,7 @@ package handler
 
 import (
 	"challenge16/internal/dto"
+	"challenge16/internal/regions"
 	"challenge16/internal/response"
 	"challenge16/utils/validation"
 	"errors"
@@ -58,6 +59,13 @@ func (h *handler) ApplyContract(c *fiber.Ctx) error {
 	contractText := string(c.Body())
 	contract, err := getContractData(contractText)
 	if err != nil {
+		if strings.HasPrefix(err.Error(), regions.InvalidRegionPrefix) {
+			return response.Response{
+				HttpStatusCode: 404,
+				ResponseCode:   "REGION_NOT_FOUND",
+				Error:          err,
+			}.WriteToJSON(c)
+		}
 		return response.Response{
 			HttpStatusCode: 400,
 			ResponseCode:   "INVALID_CONTRACT",
