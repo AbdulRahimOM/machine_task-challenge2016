@@ -198,7 +198,6 @@ func (db *DataBank) filterContractPermissionsBasedOnParentPermissions(contract d
 }
 
 func validateContract(contract dto.Contract) error {
-	// Validate the contract here
 	//if a region is included, sub regions should only be of 'excluded' type
 	for country := range contract.IncludedCountries {
 		if _, exists := contract.IncludedProvinces[country]; exists && len(contract.IncludedProvinces[country]) > 0 {
@@ -463,7 +462,7 @@ func (db *DataBank) ApplyContract(contract dto.Contract) response.Response {
 
 	if contract.ParentDistributor != nil {
 		if !db.distributorExists(*contract.ParentDistributor) {
-			return response.CreateError(400, "PARENT_DISTRIBUTOR_NOT_FOUND", fmt.Errorf("parent distributor %s not found", *contract.ParentDistributor))
+			return response.CreateError(404, "PARENT_DISTRIBUTOR_NOT_FOUND", fmt.Errorf("parent distributor %s not found", *contract.ParentDistributor))
 		}
 		db.filterContractPermissionsBasedOnParentPermissions(contract)
 	}

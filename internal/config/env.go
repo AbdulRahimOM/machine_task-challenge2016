@@ -18,14 +18,14 @@ var (
 	RateLimit int
 )
 
-func init() {
-	loadEnv()
-}
+// func init() {
+// 	loadEnv()
+// }
 
-func loadEnv() {
+func LoadEnv(path string) {
 	fmt.Println("Loading .env file...")
 	//parse .env file
-	err := godotenv.Load()
+	err := godotenv.Load(path)
 	if err != nil {
 		log.Fatal("Error loading .env file. err", err)
 	}
