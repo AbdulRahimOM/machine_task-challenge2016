@@ -2,4 +2,5 @@ main
 .vscode
 __debug_bin*
 .env
+
 .DS_Store
