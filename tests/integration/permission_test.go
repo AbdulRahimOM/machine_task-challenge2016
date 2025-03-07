@@ -140,8 +140,7 @@ EXCLUDE: KA-IN`,
 			name: "Giving sub-contract to distributor having some permissions",
 			contract: `Permissions for DISTRIBUTOR5 < DISTRIBUTOR1
 INCLUDE: IN
-EXCLUDE: EM-PA
-EXCLUDE: GJ-IN`,
+EXCLUDE: AP-IN`,
 			expectedStatusCode:   http.StatusOK,
 			expectedStatus:       true,
 			expectedResponseCode: SUCCESS,

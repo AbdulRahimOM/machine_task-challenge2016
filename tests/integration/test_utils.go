@@ -1,7 +1,6 @@
 package test
 
 import (
-	"challenge16/internal/config"
 	"challenge16/internal/regions"
 	"challenge16/internal/server"
 	"sync"
@@ -12,7 +11,6 @@ import (
 
 const (
 	csvFile = "../../cities.csv"
-	envPath = "../../.env"
 )
 
 type Response struct {
@@ -46,10 +44,7 @@ func SetupIntegrationTest(t *testing.T) *TestSetup {
 		t.Fatalf("Error loading data into map: %v", err)
 	}
 
-	//initialize the environment configuration
-	config.LoadEnv(envPath)
-
-	app := server.NewServer()
+	app := server.NewServer(1000000000) //effectively no rate limit
 
 	ts.App = app
 	ts.Cleanup = func() {
