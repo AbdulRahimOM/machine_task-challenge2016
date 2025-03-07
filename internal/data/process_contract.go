@@ -240,7 +240,37 @@ func validateContract(contract dto.Contract) error {
 		for province := range contract.ExcludedProvinces[country] {
 			if _, exists := contract.IncludedCities[country]; exists && len(contract.IncludedCities[country][province]) > 0 {
 				return fmt.Errorf("province %s in country %s is excluded, but its cities are included. A region cannot be excluded while including its sub-regions", province, country)
-			}		
+			}
+
+			// A province can be excluded only if its country is included; otherwise, it's meaningless.
+			if !contract.IncludedCountries[country] {
+				return fmt.Errorf("province %s in country %s is excluded, but the country is not included. A region can be excluded only if its parent is included.", province, country)  
+			}
+
+			// A province should not be included and excluded at the same time
+			if _, exists := contract.IncludedProvinces[country]; exists && contract.IncludedProvinces[country][province] {
+				return fmt.Errorf("province %s in country %s cannot be both included and excluded", province, country)  
+			}
+		}
+	}
+
+	for country := range contract.ExcludedCities {
+		for province := range contract.ExcludedCities[country] {
+			for city := range contract.ExcludedCities[country][province] {
+				// A city can be excluded only when either its province is included or its country is included without excluding the province.
+				if !contract.IncludedCountries[country] {
+					if _, exists := contract.IncludedProvinces[country]; !exists || !contract.IncludedProvinces[country][province] {
+						return fmt.Errorf("city %s in province %s in country %s is excluded, but the country is not included and the province is not included. A region cannot be excluded while its parent region is not included", city, province, country)
+					}
+				}
+
+				// A city should not be included and excluded at the same time
+				if _, exists := contract.IncludedCities[country]; exists {
+					if _, exists := contract.IncludedCities[country][province]; exists && contract.IncludedCities[country][province][city] {
+						return fmt.Errorf("city %s in province %s in country %s cannot be both included and excluded", city, province, country)
+					}
+				}
+			}
 		}
 	}
 
