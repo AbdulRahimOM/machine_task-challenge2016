@@ -236,6 +236,14 @@ func validateContract(contract dto.Contract) error {
 		}
 	}
 
+	for country := range contract.ExcludedProvinces {
+		for province := range contract.ExcludedProvinces[country] {
+			if _, exists := contract.IncludedCities[country]; exists && len(contract.IncludedCities[country][province]) > 0 {
+				return fmt.Errorf("province %s in country %s is excluded, but its cities are included. A region cannot be excluded while including its sub-regions", province, country)
+			}		
+		}
+	}
+
 	return nil
 }
 

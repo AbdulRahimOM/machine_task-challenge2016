@@ -64,8 +64,8 @@ func (c *Contract) AddExcludedRegion(regionString string) error {
 	}
 
 	switch region.Type {
-	case regions.COUNTRY:
-		c.IncludedCountries[region.CountryCode] = false
+	case regions.COUNTRY: //its meaningless to exclude a country, as there is no world level inclusion to exclude from
+	// 	c.IncludedCountries[region.CountryCode] = false
 	case regions.PROVINCE:
 		if c.ExcludedProvinces[region.CountryCode] == nil {
 			c.ExcludedProvinces[region.CountryCode] = make(map[string]bool)

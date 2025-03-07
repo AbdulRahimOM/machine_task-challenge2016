@@ -117,7 +117,7 @@ func getContractData(contractText string) (*dto.Contract, error) {
 	}
 
 	distributorHeirarchyText := strings.TrimPrefix(heading, "Permissions for ")
-	distributorHeirarchyText = strings.ReplaceAll(distributorHeirarchyText, " ", "") //Remove spaces
+	distributorHeirarchyText = strings.ReplaceAll(distributorHeirarchyText, " ", "") //Remove spaces for space-typo tolerance (extra spaces)
 	distributorHeirarchy := strings.Split(distributorHeirarchyText, "<")
 	switch len(distributorHeirarchy) {
 	case 0:
@@ -147,27 +147,40 @@ func getContractData(contractText string) (*dto.Contract, error) {
 	for _, data := range contractData[1:] {
 		data = strings.TrimLeft(data, " ")
 		switch {
-		case strings.HasPrefix(data, "INCLUDE: "):
-			data = strings.TrimPrefix(data, "INCLUDE: ")
+		case strings.HasPrefix(data, "INCLUDE:"):
+			data = strings.TrimPrefix(data, "INCLUDE:")
+			data = strings.ReplaceAll(data, " ", "") //for space-typo tolerance (extra spaces)
 			err = contract.AddIncludedRegion(data)
 			if err != nil {
 				return nil, err
 			}
 
-		case strings.HasPrefix(data, "EXCLUDE: "):
-			data = strings.TrimPrefix(data, "EXCLUDE: ")
+		case strings.HasPrefix(data, "EXCLUDE:"):
+			line := data
+			data = strings.TrimPrefix(data, "EXCLUDE:")
+			data = strings.ReplaceAll(data, " ", "") //for space-typo tolerance (extra spaces)
+			if !strings.Contains(data, "-") {
+				//only country is mentioned
+				if !regions.CheckCountry(data) {
+					return nil, errors.New(regions.InvalidRegionPrefix + data)
+				} else {
+					return nil, errors.New("excluding a country(line:'" + line + "') is meaningless since there's no world-level inclusion to exclude from")
+				}
+			}
+
 			err = contract.AddExcludedRegion(data)
 			if err != nil {
 				return nil, err
 			}
+		case data == "": //empty line
+			continue
 		default:
 			return nil, errors.New("Invalid contract, invalid line found: " + data)
 		}
 	}
 
 	if len(contract.IncludedCountries) == 0 && len(contract.IncludedProvinces) == 0 && len(contract.IncludedCities) == 0 {
-		err = errors.New("Invalid contract, no included regions found in contract")
-		return nil, err
+		return nil, errors.New("Invalid contract, no included regions found in contract")
 	}
 
 	return &contract, nil
