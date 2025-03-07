@@ -79,6 +79,10 @@ This project was developed as part of a machine task for a company interview pro
 - Contract-based permission management
 - Region-based distribution control
 
+### 🧪 Integration Testing
+- Integration tests implemented to verify system functionality
+- Tests cover contract validation, permissions management and their inheritance.
+
 ## 📝 Technical Notes
 - Thread-safe operations using read-write mutex locks
 - CSV-based region validation
